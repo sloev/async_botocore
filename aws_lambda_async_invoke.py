@@ -20,7 +20,7 @@ def invoke_test(i):
     )
     took = time.time() - start
     logging.warning("{} finished, took:{}".format(i, took))
-    return response
+    return response[u"Payload"].read()
 
 if __name__ == "__main__":
 
@@ -32,20 +32,37 @@ if __name__ == "__main__":
 
     logging.warning("sched")
     end = time.time() + 10
+
+    todo = [(i, ) for i in range(20)]
+    jobs = {}
     try:
         i = 0
         while True:
-            room = pool.wait_available(timeout=1)
-            if time.time() > end and pool.join(timeout=1):
+            # add jobs if within grace period
+            if not pool.full() and time.time() < end:
+                try:
+                    for _ in range(concurrency - len(jobs.keys())):
+                        args = todo.pop() # raises IndexError if no more jobs todo
+                        greenthread = pool.spawn(invoke_test, *args)
+                        jobs[greenthread] = args
+
+                except IndexError:
+                    logging.warning("no more jobs todo")
+            # check if done
+            done = pool.join(timeout=1)
+            # iterate through results, delete done greenthreads
+            for greenthread, args in reversed(jobs.items()):
+                if greenthread.successful():
+                    logging.warning("success! args:{}, result:{}".format(args, greenthread.value))
+                    jobs.pop(greenthread)
+                elif greenthread.ready():
+                    logging.warning("fail! args:{}, result:{}".format(args, greenthread.value))
+            # if no more jobs and graceperiod ended then shutdown
+            if time.time() > end and done :
                 logging.warning("no more jobs, no more time")
                 break
-            if room and time.time() < end:
-                pool.spawn(invoke_test, i)
-                i += 1
     except:
         logging.exception("error")
 
-    logging.warning("waiting for jobs")
 
-
-    logging.warning("exit")
+    logging.warning("exit, jobs={}".format(jobs))
