@@ -1,11 +1,13 @@
-from gevent import monkey, pool
+from gevent import monkey
 monkey.patch_all()#socket=True, dns=True, time=True, select=True,thread=False, os=True, ssl=True, httplib=False, aggressive=True)
+from gevent.pool import Pool
 
 
 import botocore.session
 import logging
 import time
 
+concurrency = 10
 
 def invoke_test(i):
     start = time.time()
@@ -22,19 +24,11 @@ def invoke_test(i):
     logging.warning("{} finished, took:{}".format(i, took))
     return response[u"Payload"].read()
 
-if __name__ == "__main__":
-
-    logging.info("Creating a pool")
-    concurrency = 10
-
-    pool = pool.Pool(concurrency)
-
-
-    logging.warning("sched")
-    end = time.time() + 10
-
-    todo = [(i, ) for i in range(20)]
+def process_jobs(todo, end):
+    pool = Pool(concurrency)
     jobs = {}
+
+
     try:
         i = 0
         while True:
@@ -42,8 +36,8 @@ if __name__ == "__main__":
             if not pool.full() and time.time() < end:
                 try:
                     for _ in range(concurrency - len(jobs.keys())):
-                        args = todo.pop() # raises IndexError if no more jobs todo
-                        greenthread = pool.spawn(invoke_test, *args)
+                        func, args = todo.pop(0) # raises IndexError if no more jobs todo
+                        greenthread = pool.spawn(func, *args)
                         jobs[greenthread] = args
 
                 except IndexError:
@@ -63,6 +57,20 @@ if __name__ == "__main__":
                 break
     except:
         logging.exception("error")
+    return jobs
+
+if __name__ == "__main__":
+
+    logging.info("Creating a pool")
 
 
-    logging.warning("exit, jobs={}".format(jobs))
+
+    logging.warning("sched")
+    end = time.time() + 10
+
+    todo = [(invoke_test, (i, )) for i in range(20)]
+    error_jobs = process_jobs(todo, end)
+
+
+
+    logging.warning("exit, jobs={}".format(error_jobs))
