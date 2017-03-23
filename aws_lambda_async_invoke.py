@@ -1,3 +1,11 @@
+"""
+This project is demonstration of how to invoke an AWS lambda function from python concurrently.
+10 simultaneous invocations will run at all times, and everytime a call has resolved, a new call will be created.
+Notice how the code seems synchronous and the total lack of explicit concurrency known from libs like asyncio or tornado.
+"""
+
+
+
 from gevent import monkey
 monkey.patch_all()#socket=True, dns=True, time=True, select=True,thread=False, os=True, ssl=True, httplib=False, aggressive=True)
 from gevent.pool import Pool
@@ -7,7 +15,9 @@ import botocore.session
 import logging
 import time
 
+
 concurrency = 10
+
 
 def invoke_test(i):
     start = time.time()
@@ -28,9 +38,7 @@ def process_jobs(todo, end):
     pool = Pool(concurrency)
     jobs = {}
 
-
     try:
-        i = 0
         while True:
             # add jobs if within grace period
             if not pool.full() and time.time() < end:
@@ -72,5 +80,4 @@ if __name__ == "__main__":
     error_jobs = process_jobs(todo, end)
 
 
-
-    logging.warning("exit, jobs={}".format(error_jobs))
+    logging.warning("exit, errors={}".format(error_jobs))
